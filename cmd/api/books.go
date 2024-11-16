@@ -11,16 +11,24 @@ import (
 )
 
 var incomingData struct {
-	Content *string `json:"content"`
-	Author  *string `json:"author"`
+	Title           *string `json:"title"`
+	Authors         *string `json:"authors"`
+	ISBN            *string `json:"isbn"`
+	PublicationDate *string `json:"publication_date"` // Use string to parse and validate date later
+	Genre           *string `json:"genre"`
+	Description     *string `json:"description"`
 }
 
-func (a *applicationDependencies) createCommentHandler(w http.ResponseWriter, r *http.Request) {
+func (a *applicationDependencies) createBookHandler(w http.ResponseWriter, r *http.Request) {
 	// create a struct to hold a comment
 	// we use struct tags to make the names display in lowercase
 	var incomingData struct {
-		Content string `json:"content"`
-		Author  string `json:"author"`
+		Title           string `json:"title"`
+		Authors         string `json:"authors"`
+		ISBN            string `json:"isbn"`
+		PublicationDate string `json:"publication_date"` // Use string to parse and validate date later
+		Genre           string `json:"genre"`
+		Description     string `json:"description"`
 	}
 	// perform the decoding
 	err := a.readJSON(w, r, &incomingData)
@@ -29,31 +37,34 @@ func (a *applicationDependencies) createCommentHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	comment := &data.Comment{
-		Content: incomingData.Content,
-		Author:  incomingData.Author,
+	book := &data.Book{
+		Title:           incomingData.Title,
+		Authors:         incomingData.Authors,
+		ISBN:            incomingData.ISBN,
+		PublicationDate: incomingData.PublicationDate,
+		Genre:           incomingData.Genre,
+		Description:     incomingData.Description,
 	}
 	// Initialize a Validator instance
 	v := validator.New()
 
-	data.ValidateComment(v, comment)
+	data.ValidateBook(v, book)
 	if !v.IsEmpty() {
 		a.failedValidationResponse(w, r, v.Errors) // implemented later
 		return
 	}
-	err = a.commentModel.Insert(comment)
+	err = a.bookModel.Insert(book)
 	if err != nil {
 		a.serverErrorResponse(w, r, err)
 		return
 	}
 
-	fmt.Fprintf(w, "%+v\n", incomingData) // delete this
 	// Set a Location header. The path to the newly created comment
 	headers := make(http.Header)
-	headers.Set("Location", fmt.Sprintf("/v1/comments/%d", comment.ID))
+	headers.Set("Location", fmt.Sprintf("/api/v1/books/%d", book.ID))
 
 	data := envelope{
-		"comment": comment,
+		"Book": book,
 	}
 	err = a.writeJSON(w, http.StatusCreated, data, headers)
 	if err != nil {
@@ -61,22 +72,16 @@ func (a *applicationDependencies) createCommentHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	// for now display the result
-	fmt.Fprintf(w, "%+v\n", incomingData)
 }
 
-func (a *applicationDependencies) displayCommentHandler(w http.ResponseWriter, r *http.Request) {
-	// Get the id from the URL /v1/comments/:id so that we
-	// can use it to query teh comments table. We will
-	// implement the readIDParam() function later
+func (a *applicationDependencies) displayBookHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := a.readIDParam(r)
 	if err != nil {
 		a.notFoundResponse(w, r)
 		return
 	}
 
-	// Call Get() to retrieve the comment with the specified id
-	comment, err := a.commentModel.Get(id)
+	book, err := a.bookModel.Get(id)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -89,7 +94,7 @@ func (a *applicationDependencies) displayCommentHandler(w http.ResponseWriter, r
 
 	// display the comment
 	data := envelope{
-		"comment": comment,
+		"Book": book,
 	}
 	err = a.writeJSON(w, http.StatusOK, data, nil)
 	if err != nil {
@@ -99,7 +104,7 @@ func (a *applicationDependencies) displayCommentHandler(w http.ResponseWriter, r
 
 }
 
-func (a *applicationDependencies) updateCommentHandler(w http.ResponseWriter, r *http.Request) {
+func (a *applicationDependencies) updateBookHandler(w http.ResponseWriter, r *http.Request) {
 	// Get the ID from the URL
 	id, err := a.readIDParam(r)
 	if err != nil {
@@ -108,7 +113,7 @@ func (a *applicationDependencies) updateCommentHandler(w http.ResponseWriter, r 
 	}
 
 	// Retrieve the comment from the database
-	comment, err := a.commentModel.Get(id)
+	book, err := a.bookModel.Get(id)
 	if err != nil {
 		if errors.Is(err, data.ErrRecordNotFound) {
 			a.notFoundResponse(w, r)
@@ -126,23 +131,35 @@ func (a *applicationDependencies) updateCommentHandler(w http.ResponseWriter, r 
 	}
 
 	// Update the comment fields based on the incoming data
-	if incomingData.Content != nil {
-		comment.Content = *incomingData.Content
+	if incomingData.Title != nil {
+		book.Title = *incomingData.Title
 	}
-	if incomingData.Author != nil {
-		comment.Author = *incomingData.Author
+	if incomingData.Authors != nil {
+		book.Authors = *incomingData.Authors
+	}
+	if incomingData.ISBN != nil {
+		book.ISBN = *incomingData.ISBN
+	}
+	if incomingData.PublicationDate != nil {
+		book.PublicationDate = *incomingData.PublicationDate
+	}
+	if incomingData.Genre != nil {
+		book.Genre = *incomingData.Genre
+	}
+	if incomingData.Description != nil {
+		book.Description = *incomingData.Description
 	}
 
 	// Validate the updated comment
 	v := validator.New()
-	data.ValidateComment(v, comment)
+	data.ValidateBook(v, book)
 	if !v.IsEmpty() {
 		a.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
 	// Perform the update in the database
-	err = a.commentModel.Update(comment)
+	err = a.bookModel.Update(book)
 	if err != nil {
 		a.serverErrorResponse(w, r, err)
 		return
@@ -150,7 +167,7 @@ func (a *applicationDependencies) updateCommentHandler(w http.ResponseWriter, r 
 
 	// Respond with the updated comment
 	data := envelope{
-		"comment": comment,
+		"Book": book,
 	}
 	err = a.writeJSON(w, http.StatusOK, data, nil)
 	if err != nil {
@@ -159,14 +176,14 @@ func (a *applicationDependencies) updateCommentHandler(w http.ResponseWriter, r 
 	}
 }
 
-func (a *applicationDependencies) deleteCommentHandler(w http.ResponseWriter, r *http.Request) {
+func (a *applicationDependencies) deleteBookHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := a.readIDParam(r)
 	if err != nil {
 		a.notFoundResponse(w, r)
 		return
 	}
 
-	err = a.commentModel.Delete(id)
+	err = a.bookModel.Delete(id)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -178,7 +195,7 @@ func (a *applicationDependencies) deleteCommentHandler(w http.ResponseWriter, r 
 	}
 
 	data := envelope{
-		"message": "comment successfully deleted",
+		"message": "Book successfully deleted",
 	}
 	err = a.writeJSON(w, http.StatusOK, data, nil)
 	if err != nil {
@@ -186,25 +203,31 @@ func (a *applicationDependencies) deleteCommentHandler(w http.ResponseWriter, r 
 	}
 }
 
-func (a *applicationDependencies) listCommentsHandler(w http.ResponseWriter, r *http.Request) {
+func (a *applicationDependencies) SearchAndlistBooksHandler(w http.ResponseWriter, r *http.Request) {
 	// Create a struct to hold the query parameters
 	// Later on we will add fields for pagination and sorting (filters)
 	var queryParametersData struct {
-		Content string
-		Author  string
+		Title  string
+		Author string
+		Genre  string
 		data.Filters
 	}
 	// get the query parameters from the URL
 	queryParameters := r.URL.Query()
 	// Load the query parameters into our struct
-	queryParametersData.Content = a.getSingleQueryParameter(
+	queryParametersData.Title = a.getSingleQueryParameter(
 		queryParameters,
-		"content",
+		"title",
 		"")
 
 	queryParametersData.Author = a.getSingleQueryParameter(
 		queryParameters,
-		"author",
+		"authors",
+		"")
+
+	queryParametersData.Genre = a.getSingleQueryParameter(
+		queryParameters,
+		"genre",
 		"")
 
 	v := validator.New()
@@ -216,8 +239,8 @@ func (a *applicationDependencies) listCommentsHandler(w http.ResponseWriter, r *
 	queryParametersData.Filters.Sort = a.getSingleQueryParameter(
 		queryParameters, "sort", "id")
 
-	queryParametersData.Filters.SortSafeList = []string{"id", "author",
-		"-id", "-author"}
+	queryParametersData.Filters.SortSafeList = []string{"id", "title", "authors", "genre",
+		"-id", "-title", "-authors", "-genre"}
 
 	// Check if our filters are valid
 	data.ValidateFilters(v, queryParametersData.Filters)
@@ -226,9 +249,10 @@ func (a *applicationDependencies) listCommentsHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	comments, metadata, err := a.commentModel.GetAll(
-		queryParametersData.Content,
+	books, metadata, err := a.bookModel.GetAll(
+		queryParametersData.Title,
 		queryParametersData.Author,
+		queryParametersData.Genre,
 		queryParametersData.Filters,
 	)
 	if err != nil {
@@ -236,7 +260,7 @@ func (a *applicationDependencies) listCommentsHandler(w http.ResponseWriter, r *
 		return
 	}
 	data := envelope{
-		"comments":  comments,
+		"Books":     books,
 		"@metadata": metadata,
 	}
 	err = a.writeJSON(w, http.StatusOK, data, nil)

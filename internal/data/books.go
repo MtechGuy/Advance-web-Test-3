@@ -6,44 +6,77 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/mtechguy/test3/internal/validator"
 )
 
 // each name begins with uppercase so that they are exportable/public
-type Comment struct {
-	ID        int64     `json:"id"`
-	Content   string    `json:"content"`
-	Author    string    `json:"author"`
-	CreatedAt time.Time `json:"-"`
-	Version   int32     `json:"version"`
+
+type Book struct {
+	ID              int64   `json:"id"` // bigserial maps to int64
+	Title           string  `json:"title"`
+	Authors         string  `json:"authors"`          // TEXT[] maps to a slice of strings
+	ISBN            string  `json:"isbn"`             // Optional field, use a pointer to handle NULL
+	PublicationDate string  `json:"publication_date"` // DATE maps to *time.Time for optional values
+	Genre           string  `json:"genre"`            // Optional field, use a pointer to handle NULL
+	Description     string  `json:"description"`      // Optional field, use a pointer to handle NULL
+	AverageRating   float32 `json:"average_rating"`   // DECIMAL maps to float64
+	Version         int32   `json:"version"`          // Default field for versioning
 }
 
-type CommentModel struct {
+type BookModel struct {
 	DB *sql.DB
 }
 
-func ValidateComment(v *validator.Validator, comment *Comment) {
-	// check if the Content field is empty
-	v.Check(comment.Content != "", "content", "must be provided")
-	// check if the Author field is empty
-	v.Check(comment.Author != "", "author", "must be provided")
-	// check if the Content field is empty
-	v.Check(len(comment.Content) <= 100, "content", "must not be more than 100 bytes long")
-	// check if the Author field is empty
-	v.Check(len(comment.Author) <= 25, "author", "must not be more than 25 bytes long")
+func ValidateBook(v *validator.Validator, book *Book) {
+	// Validate the Title field
+	v.Check(strings.TrimSpace(book.Title) != "", "title", "must be provided")
+	v.Check(len(book.Title) <= 200, "title", "must not be more than 200 bytes long")
+
+	// Validate the Authors field
+	v.Check(strings.TrimSpace(book.Authors) != "", "authors", "must be provided")
+	v.Check(len(book.Authors) <= 200, "authors", "must not be more than 200 bytes long")
+
+	v.Check(strings.TrimSpace(book.ISBN) != "", "isbn", "must be provided")
+	v.Check(len(book.ISBN) == 13, "isbn", "must be 13 digits long")
+	v.Check(regexp.MustCompile(`^\d{13}$`).MatchString(book.ISBN), "isbn", "must contain only digits")
+
+	// Check if the publication date is provided
+	v.Check(strings.TrimSpace(book.PublicationDate) != "", "publication_date", "must be provided")
+
+	// Regular expression to match the format "July 12, 2024"
+	dateRegex := `^[A-Za-z]+ \d{1,2}, \d{4}$`
+	re := regexp.MustCompile(dateRegex)
+
+	// Check if the date matches the regex
+	if !re.MatchString(book.PublicationDate) {
+		v.AddError("publication_date", "must be in the format 'July 12, 2020'")
+	}
+
+	// Check if the length of the publication date is less than or equal to 200
+	v.Check(len(book.PublicationDate) <= 200, "publication_date", "must not be more than 200 bytes long")
+
+	v.Check(strings.TrimSpace(book.Genre) != "", "genre", "must be provided")
+	v.Check(len(book.Genre) <= 200, "genre", "must not be more than 200 bytes long")
+
+	// Validate the Description field
+	v.Check(strings.TrimSpace(book.Description) != "", "description", "must be provided")
+	v.Check(len(book.Description) <= 200, "description", "must not be more than 200 bytes long")
+
 }
 
-func (c CommentModel) Insert(comment *Comment) error {
+func (c BookModel) Insert(book *Book) error {
 	// the SQL query to be executed against the database table
 	query := `
-		 INSERT INTO comments (content, author)
-		 VALUES ($1, $2)
-		 RETURNING id, created_at, version
+	INSERT INTO books (title, authors, isbn, publication_date, genre, description) 
+	VALUES ($1, $2, $3, $4, $5, $6) 
+	RETURNING id, version;
 		 `
 	// the actual values to replace $1, and $2
-	args := []any{comment.Content, comment.Author}
+	args := []any{book.Title, book.Authors, book.ISBN, book.PublicationDate, book.Genre, book.Description}
 
 	// Create a context with a 3-second timeout. No database
 	// operation should take more than 3 seconds or we will quit it
@@ -53,36 +86,39 @@ func (c CommentModel) Insert(comment *Comment) error {
 	// id, created_at, and version to be sent back to us which we will use
 	// to update the Comment struct later on
 	return c.DB.QueryRowContext(ctx, query, args...).Scan(
-		&comment.ID,
-		&comment.CreatedAt,
-		&comment.Version)
+		&book.ID,
+		&book.Version)
 }
 
 // Get a specific Comment from the comments table
-func (c CommentModel) Get(id int64) (*Comment, error) {
+func (c BookModel) Get(id int64) (*Book, error) {
 	// check if the id is valid
 	if id < 1 {
 		return nil, ErrRecordNotFound
 	}
 	// the SQL query to be executed against the database table
 	query := `
-		 SELECT id, created_at, content, author, version
-		 FROM comments
+		 SELECT  id, title, authors, isbn, publication_date, genre, description, average_rating, version
+		 FROM books
 		 WHERE id = $1
 	   `
 	// declare a variable of type Comment to store the returned comment
-	var comment Comment
+	var book Book
 
 	// Set a 3-second context/timer
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	err := c.DB.QueryRowContext(ctx, query, id).Scan(
-		&comment.ID,
-		&comment.CreatedAt,
-		&comment.Content,
-		&comment.Author,
-		&comment.Version,
+		&book.ID,
+		&book.Title,
+		&book.Authors, // pq.Array handles TEXT[] types
+		&book.ISBN,
+		&book.PublicationDate,
+		&book.Genre,
+		&book.Description,
+		&book.AverageRating,
+		&book.Version,
 	)
 	// Cont'd on the next slide
 	// check for which type of error
@@ -94,28 +130,28 @@ func (c CommentModel) Get(id int64) (*Comment, error) {
 			return nil, err
 		}
 	}
-	return &comment, nil
+	return &book, nil
 }
 
-func (c CommentModel) Update(comment *Comment) error {
+func (c BookModel) Update(book *Book) error {
 	// The SQL query to be executed against the database table
 	// Every time we make an update, we increment the version number
 	query := `
-			UPDATE comments
-			SET content = $1, author = $2, version = version + 1
-			WHERE id = $3
+			UPDATE books
+			SET  title = $1, authors = $2, isbn = $3, publication_date = $4, genre = $5, description = $6, version = version + 1
+			WHERE id = $7
 			RETURNING version 
 			`
 
-	args := []any{comment.Content, comment.Author, comment.ID}
+	args := []any{book.Title, book.Authors, book.ISBN, book.PublicationDate, book.Genre, book.Description, book.ID}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	return c.DB.QueryRowContext(ctx, query, args...).Scan(&comment.Version)
+	return c.DB.QueryRowContext(ctx, query, args...).Scan(&book.Version)
 
 }
 
-func (c CommentModel) Delete(id int64) error {
+func (c BookModel) Delete(id int64) error {
 
 	// check if the id is valid
 	if id < 1 {
@@ -123,7 +159,7 @@ func (c CommentModel) Delete(id int64) error {
 	}
 	// the SQL query to be executed against the database table
 	query := `
-        DELETE FROM comments
+        DELETE FROM books
         WHERE id = $1
 		`
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -151,23 +187,81 @@ func (c CommentModel) Delete(id int64) error {
 
 }
 
-func (c CommentModel) GetAll(content string, author string, filters Filters) ([]*Comment, Metadata, error) {
+// func (c BookModel) GetAll(title string, authors string, genre string, filters Filters) ([]*Book, Metadata, error) {
+// 	// the SQL query to be executed against the database table
+// 	query := fmt.Sprintf(`
+// 	SELECT COUNT(*) OVER(), id, title, authors, isbn, publication_date, genre, description, average_rating, version
+// 	FROM books
+// 	WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
+// 	  AND (to_tsvector('simple', authors) @@ plainto_tsquery('simple', $2) OR $2 = '')
+// 	  AND (to_tsvector('simple', genre) @@ plainto_tsquery('simple', $3) OR $3 = '')
+// 	ORDER BY %s %s, id ASC
+// 	LIMIT $4 OFFSET $5`, filters.sortColumn(), filters.sortDirection())
+
+// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// 	defer cancel()
+
+// 	// Execute the query with pagination and filtering parameters
+// 	rows, err := c.DB.QueryContext(ctx, query, title, authors, genre, filters.limit(), filters.offset())
+// 	if err != nil {
+// 		return nil, Metadata{}, err
+// 	}
+// 	defer rows.Close()
+
+// 	var totalRecords int
+// 	books := []*Book{}
+
+// 	// Read the rows returned by the query
+// 	for rows.Next() {
+// 		var book Book
+// 		err := rows.Scan(&totalRecords,
+// 			&book.ID,
+// 			&book.Title,
+// 			&book.Authors,
+// 			&book.ISBN,
+// 			&book.PublicationDate,
+// 			&book.Genre,
+// 			&book.Description,
+// 			&book.AverageRating,
+// 			&book.Version,
+// 		)
+// 		if err != nil {
+// 			return nil, Metadata{}, err
+// 		}
+// 		books = append(books, &book)
+// 	}
+
+// 	// Check for errors after reading rows
+// 	err = rows.Err()
+// 	if err != nil {
+// 		return nil, Metadata{}, err
+// 	}
+
+// 	// Generate metadata for pagination
+// 	metadata := calculateMetaData(totalRecords, filters.Page, filters.PageSize)
+
+// 	return books, metadata, nil
+// }
+
+func (c BookModel) GetAll(title string, author string, genre string, filters Filters) ([]*Book, Metadata, error) {
 
 	// the SQL query to be executed against the database table
 	query := fmt.Sprintf(`
-	SELECT COUNT(*) OVER(), id, created_at, content, author, version
-	FROM comments
-	WHERE (to_tsvector('simple', content) @@
+	SELECT COUNT(*) OVER(), id, title, authors, isbn, publication_date, genre, description, average_rating, version
+	FROM books
+	WHERE (to_tsvector('simple', title) @@
 		  plainto_tsquery('simple', $1) OR $1 = '') 
-	AND (to_tsvector('simple', author) @@ 
-		 plainto_tsquery('simple', $2) OR $2 = '') 
+	AND (to_tsvector('simple', authors) @@ 
+		 plainto_tsquery('simple', $2) OR $2 = '')
+	AND (to_tsvector('simple', genre) @@ 
+		 plainto_tsquery('simple', $3) OR $3 = '') 
 	ORDER BY %s %s, id ASC 
-	LIMIT $3 OFFSET $4`, filters.sortColumn(), filters.sortDirection())
+	LIMIT $4 OFFSET $5`, filters.sortColumn(), filters.sortDirection())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	rows, err := c.DB.QueryContext(ctx, query, content, author, filters.limit(), filters.offset())
+	rows, err := c.DB.QueryContext(ctx, query, title, author, genre, filters.limit(), filters.offset())
 
 	if err != nil {
 		return nil, Metadata{}, err
@@ -177,24 +271,28 @@ func (c CommentModel) GetAll(content string, author string, filters Filters) ([]
 	defer rows.Close()
 	totalRecords := 0
 	// we will store the address of each comment in our slice
-	comments := []*Comment{}
+	books := []*Book{}
 
 	// process each row that is in rows
 
 	for rows.Next() {
-		var comment Comment
+		var book Book
 		err := rows.Scan(&totalRecords,
-			&comment.ID,
-			&comment.CreatedAt,
-			&comment.Content,
-			&comment.Author,
-			&comment.Version,
+			&book.ID,
+			&book.Title,
+			&book.Authors,
+			&book.ISBN,
+			&book.PublicationDate,
+			&book.Genre,
+			&book.Description,
+			&book.AverageRating,
+			&book.Version,
 		)
 		if err != nil {
 			return nil, Metadata{}, err
 		}
 		// add the row to our slice
-		comments = append(comments, &comment)
+		books = append(books, &book)
 	} // end of for loop
 
 	// after we exit the loop we need to check if it generated any errors
@@ -205,6 +303,6 @@ func (c CommentModel) GetAll(content string, author string, filters Filters) ([]
 
 	metadata := calculateMetaData(totalRecords, filters.Page, filters.PageSize)
 
-	return comments, metadata, nil
+	return books, metadata, nil
 
 }

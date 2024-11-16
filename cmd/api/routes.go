@@ -15,28 +15,18 @@ func (a *applicationDependencies) routes() http.Handler {
 
 	router.MethodNotAllowed = http.HandlerFunc(a.methodNotAllowedResponse)
 
-	// GET    /api/v1/books              # List all books with pagination
-	// GET    /api/v1/books/{id}         # Get book details
-	// POST   /api/v1/books              # Add new book
-	// PUT    /api/v1/books/{id}         # Update book details
-	// DELETE /api/v1/books/{id}         # Delete book
-	// GET    /api/v1/books/search       # Search books by title/author/genre
+	//Books
+	router.HandlerFunc(http.MethodGet, "/api/v1/healthcheck", a.healthcheckHandler)
+	router.HandlerFunc(http.MethodGet, "/api/v1/books", a.requireActivatedUser(a.SearchAndlistBooksHandler))
+	router.HandlerFunc(http.MethodGet, "/api/v1/books/:id", a.requireActivatedUser(a.displayBookHandler))
+	router.HandlerFunc(http.MethodPost, "/api/v1/books", a.requireActivatedUser(a.createBookHandler))
+	router.HandlerFunc(http.MethodPatch, "/api/v1/books/:id", a.requireActivatedUser(a.updateBookHandler))
+	router.HandlerFunc(http.MethodDelete, "/api/v1/books/:id", a.requireActivatedUser(a.deleteBookHandler))
 
-	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", a.healthcheckHandler)
-	router.HandlerFunc(http.MethodGet, "/v1/comments", a.requireActivatedUser(a.listCommentsHandler))
+	router.HandlerFunc(http.MethodPut, "/api/v1/users/activated", a.activateUserHandler)
+	router.HandlerFunc(http.MethodPost, "/api/v1/tokens/authentication", a.createAuthenticationTokenHandler)
 
-	router.HandlerFunc(http.MethodPost, "/v1/comments", a.requireActivatedUser(a.createCommentHandler))
-
-	router.HandlerFunc(http.MethodGet, "/v1/comments/:id", a.requireActivatedUser(a.displayCommentHandler))
-
-	router.HandlerFunc(http.MethodPatch, "/v1/comments/:id", a.requireActivatedUser(a.updateCommentHandler))
-
-	router.HandlerFunc(http.MethodDelete, "/v1/comments/:id", a.requireActivatedUser(a.deleteCommentHandler))
-
-	router.HandlerFunc(http.MethodPut, "/v1/users/activated", a.activateUserHandler)
-	router.HandlerFunc(http.MethodPost, "/v1/tokens/authentication", a.createAuthenticationTokenHandler)
-
-	router.HandlerFunc(http.MethodPost, "/v1/users", a.registerUserHandler)
+	router.HandlerFunc(http.MethodPost, "/api/v1/users", a.registerUserHandler)
 
 	return a.recoverPanic(a.rateLimit(a.authenticate(router)))
 
