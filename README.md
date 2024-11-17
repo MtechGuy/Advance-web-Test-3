@@ -42,7 +42,5 @@ curl -i -H "Authorization: Bearer BEARER_TOKEN" http://localhost:4000/api/v1/hea
 # Replace ":uid" with the user ID
 curl -i -H "Authorization: Bearer BEARER_TOKEN" http://localhost:4000/api/v1/users/uid
 ```
-</details>
-<details>
 
 </summary>
