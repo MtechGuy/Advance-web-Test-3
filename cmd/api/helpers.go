@@ -112,13 +112,13 @@ func (a *applicationDependencies) readJSON(w http.ResponseWriter,
 	return nil
 }
 
-func (a *applicationDependencies) readIDParam(r *http.Request) (int64, error) {
-
+func (a *applicationDependencies) readIDParam(r *http.Request, sid string) (int64, error) {
+	//get the url parameters
 	params := httprouter.ParamsFromContext(r.Context())
-
-	id, err := strconv.ParseInt(params.ByName("id"), 10, 64)
+	//convert id from string to int
+	id, err := strconv.ParseInt(params.ByName(sid), 10, 64)
 	if err != nil || id < 1 {
-		return 0, errors.New("invalid id parameter")
+		return 0, errors.New("invalid ID parameter")
 	}
 
 	return id, nil

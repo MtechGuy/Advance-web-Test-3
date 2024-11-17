@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- Create the bookreviews table if it does not exist
 CREATE TABLE IF NOT EXISTS bookreviews (
     id bigserial PRIMARY KEY,
-    book_id INT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    book_id INT DEFAULT 0 REFERENCES books(id) ON DELETE CASCADE,
+    user_id INT DEFAULT 0 REFERENCES users(id) ON DELETE CASCADE,
     rating FLOAT CHECK (rating BETWEEN 1 AND 5),
     review TEXT,
     review_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -21,15 +21,18 @@ CREATE TABLE IF NOT EXISTS bookreviews (
 );
 
 -- Create the readinglists table if it does not exist
+-- Create the readinglists table if it does not exist
 CREATE TABLE IF NOT EXISTS readinglists (
     id bigserial PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
     description TEXT,
-    created_by INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    books INT NOT NULL REFERENCES books(id),
-    status VARCHAR(50) CHECK (status IN ('currently reading', 'completed')) NOT NULL,
+    created_by INT DEFAULT 0 REFERENCES users(id) ON DELETE CASCADE,
+    books INT REFERENCES books(id) ON DELETE CASCADE,  -- Make sure this refers to a valid book id
+    status VARCHAR(50) CHECK (status IN ('currently reading', 'completed')),
     version integer NOT NULL DEFAULT 1
 );
+
+
 
 -- Modify the users table to add reading_lists and reviews columns
 ALTER TABLE users

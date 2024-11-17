@@ -43,9 +43,12 @@ func (a *applicationDependencies) notFoundResponse(w http.ResponseWriter,
 	message := "the requested resource could not be found"
 	a.errorResponseJSON(w, r, http.StatusNotFound, message)
 }
-
-func (a *applicationDependencies) IDnotFound(w http.ResponseWriter, r *http.Request, id int64) {
-	message := fmt.Sprintf("Comment with id = %d was already deleted", id)
+func (a *applicationDependencies) BIDnotFound(w http.ResponseWriter, r *http.Request, id int64) {
+	message := fmt.Sprintf("Book with id = %d was already deleted", id)
+	a.errorResponseJSON(w, r, http.StatusNotFound, message)
+}
+func (a *applicationDependencies) LIDnotFound(w http.ResponseWriter, r *http.Request, id int64) {
+	message := fmt.Sprintf("Reading List with id = %d was already deleted", id)
 	a.errorResponseJSON(w, r, http.StatusNotFound, message)
 }
 

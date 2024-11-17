@@ -142,3 +142,36 @@ func (a *applicationDependencies) activateUserHandler(w http.ResponseWriter, r *
 		a.serverErrorResponse(w, r, err)
 	}
 }
+
+func (a *applicationDependencies) listUserProfileHandler(w http.ResponseWriter, r *http.Request) {
+	//get the id from the URL so that we can use it to query the comments table.
+	//'uid' for userID
+	id, err := a.readIDParam(r, "uid")
+	if err != nil {
+		a.notFoundResponse(w, r)
+		return
+	}
+
+	//call the GetUserProfile() function to retrieve
+	user, err := a.userModel.GetByID(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			a.notFoundResponse(w, r)
+		default:
+			a.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	//display the user information
+	data := envelope{
+		"user": user,
+	}
+
+	err = a.writeJSON(w, http.StatusOK, data, nil)
+	if err != nil {
+		a.serverErrorResponse(w, r, err)
+		return
+	}
+}

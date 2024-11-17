@@ -75,7 +75,7 @@ func (a *applicationDependencies) createBookHandler(w http.ResponseWriter, r *ht
 }
 
 func (a *applicationDependencies) displayBookHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := a.readIDParam(r)
+	id, err := a.readIDParam(r, "bid")
 	if err != nil {
 		a.notFoundResponse(w, r)
 		return
@@ -106,7 +106,7 @@ func (a *applicationDependencies) displayBookHandler(w http.ResponseWriter, r *h
 
 func (a *applicationDependencies) updateBookHandler(w http.ResponseWriter, r *http.Request) {
 	// Get the ID from the URL
-	id, err := a.readIDParam(r)
+	id, err := a.readIDParam(r, "bid")
 	if err != nil {
 		a.notFoundResponse(w, r)
 		return
@@ -177,7 +177,7 @@ func (a *applicationDependencies) updateBookHandler(w http.ResponseWriter, r *ht
 }
 
 func (a *applicationDependencies) deleteBookHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := a.readIDParam(r)
+	id, err := a.readIDParam(r, "bid")
 	if err != nil {
 		a.notFoundResponse(w, r)
 		return
@@ -187,7 +187,7 @@ func (a *applicationDependencies) deleteBookHandler(w http.ResponseWriter, r *ht
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
-			a.IDnotFound(w, r, id) // Pass the ID to the custom message handler
+			a.BIDnotFound(w, r, id) // Pass the ID to the custom message handler
 		default:
 			a.serverErrorResponse(w, r, err)
 		}

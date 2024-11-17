@@ -31,6 +31,17 @@ type BookModel struct {
 	DB *sql.DB
 }
 
+// Example Exists method in bookModel
+func (m *BookModel) Exists(bookID int) (bool, error) {
+	var exists bool
+	query := "SELECT EXISTS (SELECT 1 FROM books WHERE id = $1)"
+	err := m.DB.QueryRow(query, bookID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func ValidateBook(v *validator.Validator, book *Book) {
 	// Validate the Title field
 	v.Check(strings.TrimSpace(book.Title) != "", "title", "must be provided")
@@ -186,62 +197,6 @@ func (c BookModel) Delete(id int64) error {
 	return nil
 
 }
-
-// func (c BookModel) GetAll(title string, authors string, genre string, filters Filters) ([]*Book, Metadata, error) {
-// 	// the SQL query to be executed against the database table
-// 	query := fmt.Sprintf(`
-// 	SELECT COUNT(*) OVER(), id, title, authors, isbn, publication_date, genre, description, average_rating, version
-// 	FROM books
-// 	WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
-// 	  AND (to_tsvector('simple', authors) @@ plainto_tsquery('simple', $2) OR $2 = '')
-// 	  AND (to_tsvector('simple', genre) @@ plainto_tsquery('simple', $3) OR $3 = '')
-// 	ORDER BY %s %s, id ASC
-// 	LIMIT $4 OFFSET $5`, filters.sortColumn(), filters.sortDirection())
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
-
-// 	// Execute the query with pagination and filtering parameters
-// 	rows, err := c.DB.QueryContext(ctx, query, title, authors, genre, filters.limit(), filters.offset())
-// 	if err != nil {
-// 		return nil, Metadata{}, err
-// 	}
-// 	defer rows.Close()
-
-// 	var totalRecords int
-// 	books := []*Book{}
-
-// 	// Read the rows returned by the query
-// 	for rows.Next() {
-// 		var book Book
-// 		err := rows.Scan(&totalRecords,
-// 			&book.ID,
-// 			&book.Title,
-// 			&book.Authors,
-// 			&book.ISBN,
-// 			&book.PublicationDate,
-// 			&book.Genre,
-// 			&book.Description,
-// 			&book.AverageRating,
-// 			&book.Version,
-// 		)
-// 		if err != nil {
-// 			return nil, Metadata{}, err
-// 		}
-// 		books = append(books, &book)
-// 	}
-
-// 	// Check for errors after reading rows
-// 	err = rows.Err()
-// 	if err != nil {
-// 		return nil, Metadata{}, err
-// 	}
-
-// 	// Generate metadata for pagination
-// 	metadata := calculateMetaData(totalRecords, filters.Page, filters.PageSize)
-
-// 	return books, metadata, nil
-// }
 
 func (c BookModel) GetAll(title string, author string, genre string, filters Filters) ([]*Book, Metadata, error) {
 
