@@ -14,13 +14,18 @@ import (
 // each name begins with uppercase so that they are exportable/public
 
 type ReadingList struct {
-	ID          int64   `json:"id"`          // Maps to 'id' in SQL
-	Name        string  `json:"name"`        // Maps to 'name' in SQL
-	Description string  `json:"description"` // Maps to 'description' in SQL
-	CreatedBy   int     `json:"created_by"`  // Maps to 'created_by' in SQL
-	Books       *int    `json:"books"`       // Nullable column
-	Status      *string `json:"status"`      // Maps to 'status' in SQL
-	Version     int     `json:"version"`     // Maps to 'version' in SQL
+	ID          int64  `json:"id"`          // Maps to 'id' in SQL
+	Name        string `json:"name"`        // Maps to 'name' in SQL
+	Description string `json:"description"` // Maps to 'description' in SQL
+	CreatedBy   int    `json:"created_by"`  // Maps to 'created_by' in SQL
+	Version     int    `json:"version"`     // Maps to 'version' in SQL
+}
+
+type BooksInList struct {
+	ReadingListID int64  `json:"readinglist_id"`
+	BookID        int64  `json:"book_id"`
+	Status        string `json:"status"`
+	Version       int16  `json:"version"`
 }
 
 type ReadingListModel struct {
@@ -38,6 +43,14 @@ func ValidateReadingList(v *validator.Validator, list *ReadingList) {
 
 	// Validate CreatedBy (Foreign Key)
 	v.Check(list.CreatedBy > 0, "created_by", "must be a valid user ID")
+}
+
+// validate if status for book being added to reading list is correct
+func ValidateReadingStatus(v *validator.Validator, readingStatus string) {
+	v.Check(readingStatus != "", "status", "must be provided")
+	v.Check(readingStatus == "currently reading" || readingStatus == "completed",
+		"status",
+		"status must be of values 'completed' or 'currently reading'")
 }
 
 func (c ReadingListModel) Insert(list *ReadingList) error {
@@ -95,8 +108,6 @@ func (c ReadingListModel) Get(id int64) (*ReadingList, error) {
 		&list.Name,
 		&list.Description,
 		&list.CreatedBy,
-		&list.Books,
-		&list.Status,
 		&list.Version,
 	)
 	// Cont'd on the next slide
@@ -117,12 +128,12 @@ func (c ReadingListModel) Update(list *ReadingList) error {
 	// Every time we make an update, we increment the version number
 	query := `
 			UPDATE readinglists
-			SET  name = $1, description = $2, created_by = $3, books = $4, status = $5, version = version + 1
-			WHERE id = $6
+			SET  name = $1, description = $2, created_by = $3, version = version + 1
+			WHERE id = $4
 			RETURNING version
 			`
 
-	args := []any{list.Name, list.Description, list.CreatedBy, list.Books, list.Status, list.ID}
+	args := []any{list.Name, list.Description, list.CreatedBy, list.ID}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -166,7 +177,7 @@ func (c ReadingListModel) Delete(id int64) error {
 
 }
 
-func (c ReadingListModel) GetAll(name string, status string, filters Filters) ([]*ReadingList, Metadata, error) {
+func (c ReadingListModel) GetAll(name string, filters Filters) ([]*ReadingList, Metadata, error) {
 
 	// the SQL query to be executed against the database table
 	query := fmt.Sprintf(`
@@ -182,7 +193,7 @@ func (c ReadingListModel) GetAll(name string, status string, filters Filters) ([
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	rows, err := c.DB.QueryContext(ctx, query, name, status, filters.limit(), filters.offset())
+	rows, err := c.DB.QueryContext(ctx, query, name, filters.limit(), filters.offset())
 	if err != nil {
 		return nil, Metadata{}, err
 	}
@@ -199,8 +210,6 @@ func (c ReadingListModel) GetAll(name string, status string, filters Filters) ([
 			&list.Name,
 			&list.Description,
 			&list.CreatedBy,
-			&list.Books, // 'Books' will handle NULLs as nil
-			&list.Status,
 			&list.Version,
 		)
 		if err != nil {
@@ -219,40 +228,25 @@ func (c ReadingListModel) GetAll(name string, status string, filters Filters) ([
 	return lists, metadata, nil
 }
 
-func (c *ReadingListModel) AddBookToList(listID int, bookID *int, status string) error {
-	// Validate the provided status
-	validStatuses := []string{"currently reading", "completed"}
-	isValidStatus := false
-	for _, s := range validStatuses {
-		if status == s {
-			isValidStatus = true
-			break
-		}
-	}
-	if !isValidStatus {
-		return fmt.Errorf("invalid status value: %s", status)
-	}
+func (c *ReadingListModel) AddBookToList(book *BooksInList) error {
 
-	// Handle the case where bookID is nil (NULL in the database)
-	var bookIDToUpdate interface{}
-	if bookID != nil {
-		bookIDToUpdate = *bookID
-	} else {
-		bookIDToUpdate = nil
-	}
-
-	// Update the `books` and `status` fields in the reading list
 	query := `
-		UPDATE readinglists
-		SET books = $1, status = $2
-		WHERE id = $3
-	`
-	_, err := c.DB.Exec(query, bookIDToUpdate, status, listID)
-	if err != nil {
-		return fmt.Errorf("error updating book and status in reading list: %v", err)
-	}
+	INSERT INTO readinglist_books (readinglist_id, book_id, status) 
+	VALUES ($1, $2, $3) 
+	RETURNING readinglist_id, version;
+`
+	args := []any{book.ReadingListID, book.BookID, book.Status}
 
-	return nil
+	// Create a context with a 3-second timeout. No database
+	// operation should take more than 3 seconds or we will quit it
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// execute the query against the comments database table. We ask for the the
+	// id, created_at, and version to be sent back to us which we will use
+	// to update the Comment struct later on
+	return c.DB.QueryRowContext(ctx, query, args...).Scan(
+		&book.ReadingListID,
+		&book.Version)
 }
 
 func (c *ReadingListModel) RemoveBookFromList(listID int) error {
@@ -269,4 +263,23 @@ func (c *ReadingListModel) RemoveBookFromList(listID int) error {
 	}
 
 	return nil
+}
+
+func (b *ReadingListModel) ReadingListExist(id int64) error {
+
+	if id < 1 {
+		return ErrRecordNotFound
+	}
+
+	query := `
+	SELECT id 
+	FROM readinglists
+	WHERE id = $1`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var ID int64
+
+	return b.DB.QueryRowContext(ctx, query, id).Scan(&ID)
 }

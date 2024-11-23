@@ -26,18 +26,18 @@ CREATE TABLE IF NOT EXISTS readinglists (
     id bigserial PRIMARY KEY,
     name VARCHAR(255),
     description TEXT,
-    created_by INT DEFAULT 0 REFERENCES users(id) ON DELETE CASCADE,
-    books INT REFERENCES books(id) ON DELETE CASCADE,  -- Make sure this refers to a valid book id
-    status VARCHAR(50) CHECK (status IN ('currently reading', 'completed')),
+    created_by INT REFERENCES users(id) ON DELETE SET NULL,
     version integer NOT NULL DEFAULT 1
 );
 
-
-
--- Modify the users table to add reading_lists and reviews columns
-ALTER TABLE users
-ADD COLUMN reading_lists INT REFERENCES readinglists(id),
-ADD COLUMN reviews INT REFERENCES bookreviews(id);
+-- Junction table for Reading Lists and Books (many-to-many relationship)
+CREATE TABLE IF NOT EXISTS readinglist_books (
+    readinglist_id INT REFERENCES readinglists(id) ON DELETE CASCADE,
+    book_id INT REFERENCES books(id) ON DELETE CASCADE,
+    status VARCHAR(50) CHECK (status IN ('currently reading', 'completed')),
+    version integer NOT NULL DEFAULT 1,
+    PRIMARY KEY (readinglist_id, book_id)
+);
 
 
 -- Function to calculate and update the average rating

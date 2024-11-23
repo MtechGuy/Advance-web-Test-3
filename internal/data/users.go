@@ -23,6 +23,15 @@ type User struct {
 	Version   int       `json:"-"`
 }
 
+type UserReview struct {
+	ReviewID   int64     `json:"id"`      // bigserial primary key
+	BookID     int64     `json:"book_id"` // foreign key referencing products
+	Rating     int64     `json:"rating"`  // integer with a constraint (1-5)
+	ReviewText string    `json:"review"`  // non-null text field
+	ReviewDate time.Time `json:"-"`       // timestamp with timezone, default now()
+	Version    int       `json:"version"`
+}
+
 // Define the password type (plaintext + hashed password).
 // Lowercase because we do not want it to be public.
 type password struct {
@@ -243,4 +252,44 @@ func (u *UserModel) GetByID(id int64) (*User, error) {
 	}
 
 	return &user, nil
+}
+
+func (u *UserModel) GetUserReviews(userID int64) ([]UserReview, error) {
+	query := `
+	SELECT id, book_id, rating, review, review_date, version
+	FROM bookreviews
+	WHERE user_id = $1
+	`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := u.DB.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reviews []UserReview
+	for rows.Next() {
+		var review UserReview
+		err := rows.Scan(
+			&review.ReviewID,
+			&review.BookID,
+			&review.Rating,
+			&review.ReviewText,
+			&review.ReviewDate,
+			&review.Version,
+		)
+		if err != nil {
+			return nil, err
+		}
+		reviews = append(reviews, review)
+	}
+
+	// Check for any errors encountered during iteration
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return reviews, nil
 }

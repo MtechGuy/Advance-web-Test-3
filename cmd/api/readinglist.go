@@ -86,12 +86,6 @@ func (a *applicationDependencies) updateReadingListHandler(w http.ResponseWriter
 		return
 	}
 
-	// // Decode the incoming JSON
-	// var incomingListData struct {
-	// 	Name        *string `json:"name"`        // Pointer to allow nil
-	// 	Description *string `json:"description"` // Pointer to allow nil
-	// 	CreatedBy   *int    `json:"created_by"`  // Pointer to allow nil
-	// }
 	err = a.readJSON(w, r, &incomingListData)
 	if err != nil {
 		a.badRequestResponse(w, r, err)
@@ -196,8 +190,7 @@ func (a *applicationDependencies) ReadinglistHandler(w http.ResponseWriter, r *h
 	// Create a struct to hold the query parameters
 	// Later on we will add fields for pagination and sorting (filters)
 	var queryParametersData struct {
-		Name   string
-		Status string
+		Name string
 		data.Filters
 	}
 	// get the query parameters from the URL
@@ -206,11 +199,6 @@ func (a *applicationDependencies) ReadinglistHandler(w http.ResponseWriter, r *h
 	queryParametersData.Name = a.getSingleQueryParameter(
 		queryParameters,
 		"name",
-		"")
-
-	queryParametersData.Status = a.getSingleQueryParameter(
-		queryParameters,
-		"status",
 		"")
 
 	v := validator.New()
@@ -234,7 +222,6 @@ func (a *applicationDependencies) ReadinglistHandler(w http.ResponseWriter, r *h
 
 	lists, metadata, err := a.readingListModel.GetAll(
 		queryParametersData.Name,
-		queryParametersData.Status,
 		queryParametersData.Filters,
 	)
 	if err != nil {
@@ -252,61 +239,82 @@ func (a *applicationDependencies) ReadinglistHandler(w http.ResponseWriter, r *h
 }
 
 func (a *applicationDependencies) addReadingListBookHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract the reading list ID from the URL parameter
+	//create a struct to hold a list
+	var incomingData struct {
+		BookID int64  `json:"book_id"`
+		Status string `json:"status"`
+	}
+
+	//get list id parameter
 	id, err := a.readIDParam(r, "lid")
 	if err != nil {
 		a.notFoundResponse(w, r)
 		return
 	}
 
-	// Modify the incoming request body struct to use sql.NullInt64 for nullable integer
-	var incomingListData struct {
-		Books  *int    `json:"books"` // Nullable column
-		Status *string `json:"status"`
-	}
-
-	// Decode the incoming JSON body
-	err = a.readJSON(w, r, &incomingListData)
+	//decode
+	err = a.readJSON(w, r, &incomingData)
 	if err != nil {
 		a.badRequestResponse(w, r, err)
 		return
 	}
 
-	// Validate that the 'status' field is not nil
-	if incomingListData.Status == nil {
-		a.badRequestResponse(w, r, fmt.Errorf("status must be provided"))
+	bookInList := &data.BooksInList{
+		ReadingListID: id,
+		BookID:        incomingData.BookID,
+		Status:        incomingData.Status,
+	}
+
+	//validate status
+	v := validator.New()
+	data.ValidateReadingStatus(v, incomingData.Status)
+	if !v.IsEmpty() {
+		a.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	// Convert id (int64) to int before passing to AddBookToList
-	listID := int(id)
+	//check if reading list exist
+	err = a.readingListModel.ReadingListExist(id)
+	if err != nil {
+		a.notFoundResponse(w, r)
+		return
+	}
 
-	// Add the book to the reading list
-	err = a.readingListModel.AddBookToList(listID, incomingListData.Books, *incomingListData.Status) // Pass the book pointer and status
+	// Check if the book exists in the database
+	exists, err := a.bookModel.BookExists(incomingData.BookID)
 	if err != nil {
 		a.serverErrorResponse(w, r, err)
 		return
 	}
-
-	// Fetch the updated reading list after adding the book
-	List, err := a.readingListModel.Get(id)
-	if err != nil {
-		a.serverErrorResponse(w, r, err)
+	if !exists {
+		a.BIDnotFound(w, r, incomingData.BookID) // Respond with a 404 if the book is not found
 		return
 	}
 
-	// Set headers for location
+	//procede to insert to DB
+	err = a.readingListModel.AddBookToList(bookInList)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrDuplicateBookInList):
+			v.AddError("book", data.ErrDuplicateBookInList.Error())
+			a.failedValidationResponse(w, r, v.Errors)
+		default:
+			a.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
 	headers := make(http.Header)
-	headers.Set("Location", fmt.Sprintf("/api/v1/lists/%d", listID))
+	headers.Set("Location", fmt.Sprintf("/api/v1/lists/%d/books", incomingData.BookID))
 
-	// Send a response with the updated reading list
 	data := envelope{
-		"Reading List": List, // Use updated list
+		"Added_Book": bookInList,
 	}
 
-	err = a.writeJSON(w, http.StatusOK, data, headers)
+	err = a.writeJSON(w, http.StatusOK, data, nil)
 	if err != nil {
 		a.serverErrorResponse(w, r, err)
+		return
 	}
 }
 

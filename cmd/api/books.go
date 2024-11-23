@@ -203,68 +203,99 @@ func (a *applicationDependencies) deleteBookHandler(w http.ResponseWriter, r *ht
 	}
 }
 
-func (a *applicationDependencies) SearchAndlistBooksHandler(w http.ResponseWriter, r *http.Request) {
-	// Create a struct to hold the query parameters
-	// Later on we will add fields for pagination and sorting (filters)
-	var queryParametersData struct {
-		Title  string
-		Author string
-		Genre  string
+func (a *applicationDependencies) listBooksHandler(w http.ResponseWriter, r *http.Request) {
+	//to hold query parameters
+	var queryParameterData struct {
 		data.Filters
 	}
-	// get the query parameters from the URL
-	queryParameters := r.URL.Query()
-	// Load the query parameters into our struct
-	queryParametersData.Title = a.getSingleQueryParameter(
-		queryParameters,
-		"title",
-		"")
 
-	queryParametersData.Author = a.getSingleQueryParameter(
-		queryParameters,
-		"authors",
-		"")
-
-	queryParametersData.Genre = a.getSingleQueryParameter(
-		queryParameters,
-		"genre",
-		"")
+	//get query parameters from url
+	queryParameter := r.URL.Query()
 
 	v := validator.New()
-	queryParametersData.Filters.Page = a.getSingleIntegerParameter(
-		queryParameters, "page", 1, v)
-	queryParametersData.Filters.PageSize = a.getSingleIntegerParameter(
-		queryParameters, "page_size", 10, v)
 
-	queryParametersData.Filters.Sort = a.getSingleQueryParameter(
-		queryParameters, "sort", "id")
+	queryParameterData.Filters.Page = a.getSingleIntegerParameter(queryParameter, "page", 1, v)
+	queryParameterData.Filters.PageSize = a.getSingleIntegerParameter(queryParameter, "page_size", 10, v)
+	queryParameterData.Filters.Sort = a.getSingleQueryParameter(queryParameter, "sort", "id")
+	queryParameterData.Filters.SortSafeList = []string{"id", "title", "author", "genre", "-id", "-title", "-author", "-genre"}
 
-	queryParametersData.Filters.SortSafeList = []string{"id", "title", "authors", "genre",
-		"-id", "-title", "-authors", "-genre"}
-
-	// Check if our filters are valid
-	data.ValidateFilters(v, queryParametersData.Filters)
+	data.ValidateFilters(v, queryParameterData.Filters)
 	if !v.IsEmpty() {
 		a.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	books, metadata, err := a.bookModel.GetAll(
-		queryParametersData.Title,
-		queryParametersData.Author,
-		queryParametersData.Genre,
-		queryParametersData.Filters,
-	)
+	books, metadata, err := a.bookModel.GetAll(queryParameterData.Filters)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			a.notFoundResponse(w, r)
+			return
+		default:
+			a.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+	data := envelope{
+		"books":     books,
+		"@metadata": metadata,
+	}
+
+	err = a.writeJSON(w, http.StatusOK, data, nil)
 	if err != nil {
 		a.serverErrorResponse(w, r, err)
 		return
 	}
+}
+
+func (a *applicationDependencies) searchBookHandler(w http.ResponseWriter, r *http.Request) {
+	//to hold query parameters
+	var queryParameterData struct {
+		Title  string
+		Author string
+		Genre  string
+		data.Filters
+	}
+
+	//get query parameters from url
+	queryParameter := r.URL.Query()
+
+	//load the query parameters into the created struct
+	queryParameterData.Title = a.getSingleQueryParameter(queryParameter, "title", "")
+	queryParameterData.Author = a.getSingleQueryParameter(queryParameter, "author", "")
+	queryParameterData.Genre = a.getSingleQueryParameter(queryParameter, "genre", "")
+	v := validator.New()
+
+	queryParameterData.Filters.Page = a.getSingleIntegerParameter(queryParameter, "page", 1, v)
+	queryParameterData.Filters.PageSize = a.getSingleIntegerParameter(queryParameter, "page_size", 10, v)
+	queryParameterData.Filters.Sort = a.getSingleQueryParameter(queryParameter, "sort", "id")
+	queryParameterData.Filters.SortSafeList = []string{"id", "title", "author", "genre", "-id", "-title", "-author", "-genre"}
+
+	data.ValidateFilters(v, queryParameterData.Filters)
+	if !v.IsEmpty() {
+		a.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	books, metadata, err := a.bookModel.Search(queryParameterData.Title, queryParameterData.Author, queryParameterData.Genre, queryParameterData.Filters)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			a.notFoundResponse(w, r)
+			return
+		default:
+			a.serverErrorResponse(w, r, err)
+			return
+		}
+	}
 	data := envelope{
-		"Books":     books,
+		"books":     books,
 		"@metadata": metadata,
 	}
+
 	err = a.writeJSON(w, http.StatusOK, data, nil)
 	if err != nil {
 		a.serverErrorResponse(w, r, err)
+		return
 	}
 }

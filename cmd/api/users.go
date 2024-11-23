@@ -175,3 +175,32 @@ func (a *applicationDependencies) listUserProfileHandler(w http.ResponseWriter, 
 		return
 	}
 }
+
+func (a *applicationDependencies) getUserReviewsHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the id from the URL so that we can use it to query the comments table.
+	//'uid' for userID
+	id, err := a.readIDParam(r, "uid")
+	if err != nil {
+		a.notFoundResponse(w, r)
+		return
+	}
+
+	// Get the reviews for the user
+	reviews, err := a.userModel.GetUserReviews(id)
+	if err != nil {
+		a.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Display the user information along with their reviews
+	data := envelope{
+
+		"User Reviews": reviews,
+	}
+
+	err = a.writeJSON(w, http.StatusOK, data, nil)
+	if err != nil {
+		a.serverErrorResponse(w, r, err)
+		return
+	}
+}

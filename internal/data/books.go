@@ -198,7 +198,66 @@ func (c BookModel) Delete(id int64) error {
 
 }
 
-func (c BookModel) GetAll(title string, author string, genre string, filters Filters) ([]*Book, Metadata, error) {
+func (c BookModel) GetAll(filters Filters) ([]*Book, Metadata, error) {
+
+	// the SQL query to be executed against the database table
+	query := fmt.Sprintf(`
+	SELECT COUNT(*) OVER(), id, title, authors, isbn, publication_date, genre, description, average_rating , version
+	FROM books
+	ORDER BY %s %s, id ASC
+	LIMIT $1 OFFSET $2
+	`, filters.sortColumn(), filters.sortDirection())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := c.DB.QueryContext(ctx, query, filters.limit(), filters.offset())
+
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+
+	// clean up the memory that was used
+	defer rows.Close()
+	totalRecords := 0
+	// we will store the address of each comment in our slice
+	books := []*Book{}
+
+	// process each row that is in rows
+
+	for rows.Next() {
+		var book Book
+		err := rows.Scan(&totalRecords,
+			&book.ID,
+			&book.Title,
+			&book.Authors,
+			&book.ISBN,
+			&book.PublicationDate,
+			&book.Genre,
+			&book.Description,
+			&book.AverageRating,
+			&book.Version,
+		)
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+		// add the row to our slice
+		books = append(books, &book)
+	} // end of for loop
+
+	// after we exit the loop we need to check if it generated any errors
+	err = rows.Err()
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+
+	metadata := calculateMetaData(totalRecords, filters.Page, filters.PageSize)
+
+	return books, metadata, nil
+
+}
+
+func (c BookModel) Search(title string, author string, genre string, filters Filters) ([]*Book, Metadata, error) {
 
 	// the SQL query to be executed against the database table
 	query := fmt.Sprintf(`
