@@ -61,6 +61,11 @@ func (a *applicationDependencies) methodNotAllowedResponse(
 	a.errorResponseJSON(w, r, http.StatusMethodNotAllowed, message)
 }
 
+func (a *applicationDependencies) RIDnotFound(w http.ResponseWriter, r *http.Request, id int64) {
+	message := fmt.Sprintf("Review with id = %d was not found", id)
+	a.errorResponseJSON(w, r, http.StatusNotFound, message)
+}
+
 func (a *applicationDependencies) badRequestResponse(w http.ResponseWriter,
 	r *http.Request, err error) {
 

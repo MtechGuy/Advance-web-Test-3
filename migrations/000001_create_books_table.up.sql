@@ -11,5 +11,3 @@ CREATE TABLE books (
     version integer NOT NULL DEFAULT 1
 );
 
-
-

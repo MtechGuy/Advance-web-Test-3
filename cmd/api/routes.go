@@ -17,7 +17,7 @@ func (a *applicationDependencies) routes() http.Handler {
 
 	// Books
 	// =====
-	router.HandlerFunc(http.MethodGet, "/api/v1/healthcheck", a.healthcheckHandler)
+	router.HandlerFunc(http.MethodGet, "/api/v1/healthcheck", a.requireActivatedUser(a.healthcheckHandler))
 	router.HandlerFunc(http.MethodGet, "/api/v1/books", a.requireActivatedUser(a.SearchAndlistBooksHandler))
 	router.HandlerFunc(http.MethodGet, "/api/v1/books/:bid", a.requireActivatedUser(a.displayBookHandler))
 	router.HandlerFunc(http.MethodPost, "/api/v1/books", a.requireActivatedUser(a.createBookHandler))
@@ -34,11 +34,17 @@ func (a *applicationDependencies) routes() http.Handler {
 	router.HandlerFunc(http.MethodPost, "/api/v1/lists/:lid/books", a.requireActivatedUser(a.addReadingListBookHandler))
 	router.HandlerFunc(http.MethodDelete, "/api/v1/lists/:lid/books", a.requireActivatedUser(a.RemoveReadingListBookHandler))
 
+	// Review
+	// ======
+	router.HandlerFunc(http.MethodPost, "/api/v1/books/:bid/reviews", a.requireActivatedUser(a.createReviewHandler))
+	router.HandlerFunc(http.MethodGet, "/api/v1/books/:bid/reviews", a.requireActivatedUser(a.bookReviewsHandler))
+	router.HandlerFunc(http.MethodGet, "/api/v1/books/:bid/reviews/:rid", a.requireActivatedUser(a.displayReviewHandler))
+	router.HandlerFunc(http.MethodPatch, "/api/v1/reviews/:rid", a.requireActivatedUser(a.updateReviewHandler))
+	router.HandlerFunc(http.MethodDelete, "/api/v1/reviews/:rid", a.requireActivatedUser(a.deleteReviewHandler))
+
 	// Users
 	// =====
-	// Define the specific route first
 	router.HandlerFunc(http.MethodPut, "/api/v1/users/activated", a.activateUserHandler)
-	// Then define the generic route
 	router.HandlerFunc(http.MethodGet, "/api/v1/users/:uid", a.requireActivatedUser(a.listUserProfileHandler))
 	router.HandlerFunc(http.MethodPost, "/api/v1/tokens/authentication", a.createAuthenticationTokenHandler)
 	router.HandlerFunc(http.MethodPost, "/api/v1/users", a.registerUserHandler)

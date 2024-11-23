@@ -41,6 +41,7 @@ type applicationDependencies struct {
 	logger           *slog.Logger
 	bookModel        data.BookModel
 	readingListModel data.ReadingListModel
+	reviewModel      data.ReviewModel
 	userModel        data.UserModel
 	mailer           mailer.Mailer
 	wg               sync.WaitGroup
@@ -91,6 +92,7 @@ func main() {
 		userModel:        data.UserModel{DB: db},
 		bookModel:        data.BookModel{DB: db},
 		readingListModel: data.ReadingListModel{DB: db},
+		reviewModel:      data.ReviewModel{DB: db},
 		tokenModel:       data.TokenModel{DB: db},
 		mailer: mailer.New(setting.smtp.host, setting.smtp.port,
 			setting.smtp.username, setting.smtp.password, setting.smtp.sender),
