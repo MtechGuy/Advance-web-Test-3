@@ -249,19 +249,30 @@ func (c *ReadingListModel) AddBookToList(book *BooksInList) error {
 		&book.Version)
 }
 
-func (c *ReadingListModel) RemoveBookFromList(listID int) error {
+func (c *ReadingListModel) RemoveBookFromList(listID, bookID int) error {
 
-	// Remove the book and its status from the reading list by setting them to NULL
 	query := `
-		UPDATE readinglists
-		SET books = NULL, status = NULL
-		WHERE id = $1
+	DELETE FROM readinglist_books
+	WHERE readinglist_id = $1 AND book_id = $2
 	`
-	_, err := c.DB.Exec(query, listID)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	//excecute the query
+	result, err := c.DB.ExecContext(ctx, query, listID, bookID)
 	if err != nil {
-		return fmt.Errorf("error removing book and status from reading list: %v", err)
+		return err
 	}
 
+	//check if any rows affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound //no rows affected
+	}
 	return nil
 }
 

@@ -32,6 +32,14 @@ type UserReview struct {
 	Version    int       `json:"version"`
 }
 
+type UserList struct {
+	ID          int64  `json:"id"`          // Maps to 'id' in SQL
+	Name        string `json:"name"`        // Maps to 'name' in SQL
+	Description string `json:"description"` // Maps to 'description' in SQL
+	CreatedBy   int    `json:"created_by"`  // Maps to 'created_by' in SQL
+	Version     int    `json:"version"`     // Maps to 'version' in SQL
+}
+
 // Define the password type (plaintext + hashed password).
 // Lowercase because we do not want it to be public.
 type password struct {
@@ -292,4 +300,43 @@ func (u *UserModel) GetUserReviews(userID int64) ([]UserReview, error) {
 	}
 
 	return reviews, nil
+}
+
+func (u *UserModel) GetUserLists(userID int64) ([]UserList, error) {
+	query := `
+	SELECT id, name, description, created_by, version
+	FROM readinglists
+	WHERE created_by = $1
+	`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := u.DB.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lists []UserList // Ensure the type here matches the return type
+	for rows.Next() {
+		var list UserList // Change to UserReview if that matches your expected structure
+		err := rows.Scan(
+			&list.ID,
+			&list.Name,
+			&list.Description,
+			&list.CreatedBy,
+			&list.Version,
+		)
+		if err != nil {
+			return nil, err
+		}
+		lists = append(lists, list)
+	}
+
+	// Check for any errors encountered during iteration
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return lists, nil
 }

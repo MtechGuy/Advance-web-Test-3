@@ -319,32 +319,61 @@ func (a *applicationDependencies) addReadingListBookHandler(w http.ResponseWrite
 }
 
 func (a *applicationDependencies) RemoveReadingListBookHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract the list ID from the URL parameter
-	id, err := a.readIDParam(r, "lid")
+	//fetch the list book belongs to id
+	list_id, err := a.readIDParam(r, "lid")
 	if err != nil {
 		a.notFoundResponse(w, r)
 		return
 	}
 
-	listID := int(id)
-	// Call the RemoveBookFromList method to remove the book from the list
-	err = a.readingListModel.RemoveBookFromList(listID)
+	var incomingData struct {
+		BookID int `json:"book_id"`
+	}
+
+	//get book it
+	err = a.readJSON(w, r, &incomingData)
+	if err != nil {
+		a.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Check if the book exists in the database
+	exists, err := a.bookModel.BookExists(int64(incomingData.BookID))
+	if err != nil {
+		a.serverErrorResponse(w, r, err)
+		return
+	}
+	if !exists {
+		a.BIDnotFound(w, r, int64(incomingData.BookID)) // Respond with a 404 if the book is not found
+		return
+	}
+
+	//check if reading list exists
+	err = a.readingListModel.ReadingListExist(list_id)
+	if err != nil {
+		a.notFoundResponse(w, r)
+		return
+	}
+
+	//procede to delete book from reading list
+	err = a.readingListModel.RemoveBookFromList(incomingData.BookID, int(list_id))
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
-			a.LIDnotFound(w, r, id) // Pass the ID to the custom message handler
+			a.notFoundResponse(w, r)
 		default:
 			a.serverErrorResponse(w, r, err)
 		}
 		return
 	}
-
-	// Return success response
+	//display the message
 	data := envelope{
-		"message": "Book successfully deleted from Reading List",
+		"Message": "Book removed from  Reading List sucessfully",
 	}
+
 	err = a.writeJSON(w, http.StatusOK, data, nil)
 	if err != nil {
 		a.serverErrorResponse(w, r, err)
 	}
+
 }
