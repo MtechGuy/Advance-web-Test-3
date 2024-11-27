@@ -69,7 +69,7 @@ func main() {
 
 	flag.StringVar(&setting.smtp.password, "smtp-password", "38d1f200e85005", "SMTP password")
 
-	flag.StringVar(&setting.smtp.sender, "smtp-sender", "Comments Community <no-reply@commentscommunity.alexperaza.net>", "SMTP sender")
+	flag.StringVar(&setting.smtp.sender, "smtp-sender", "Book Club Management Community <no-reply@commentscommunity.alexperaza.net>", "SMTP sender")
 
 	flag.Parse()
 
